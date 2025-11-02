@@ -9,6 +9,7 @@ interface EdgeContextMenuProps {
   onClose: () => void;
   onChangeType: (edgeId: string, type: string) => void;
   onToggleAnimation: (edgeId: string) => void;
+  onDelete: (edgeId: string) => void;
 }
 
 export default function EdgeContextMenu({ 
@@ -19,6 +20,7 @@ export default function EdgeContextMenu({
   onClose, 
   onChangeType,
   onToggleAnimation,
+  onDelete,
 }: EdgeContextMenuProps) {
   const edgeTypes = [
     { value: 'default', label: 'Straight' },
@@ -34,6 +36,11 @@ export default function EdgeContextMenu({
 
   const handleToggleAnimation = () => {
     onToggleAnimation(id);
+  };
+
+  const handleDelete = () => {
+    onDelete(id);
+    onClose();
   };
 
   return (
@@ -121,6 +128,38 @@ export default function EdgeContextMenu({
               }}
             >
               {edge.animated ? 'ON' : 'OFF'}
+            </span>
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px" style={{ backgroundColor: '#1a1a1a' }} />
+
+        {/* Delete Option */}
+        <div className="py-0.5" style={{ backgroundColor: '#2a2a2a' }}>
+          <button
+            onClick={handleDelete}
+            className="w-full px-3 py-1.5 text-left text-xs transition-all duration-100 flex items-center justify-between"
+            style={{
+              color: '#ff6b6b',
+              backgroundColor: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#3a3a3a';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <span>Delete Edge</span>
+            <span 
+              className="text-xs px-1.5 py-0.5 rounded font-mono"
+              style={{ 
+                backgroundColor: '#3a3a3a',
+                color: '#999999',
+              }}
+            >
+              Delete
             </span>
           </button>
         </div>
