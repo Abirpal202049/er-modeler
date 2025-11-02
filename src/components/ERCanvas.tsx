@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState, useRef } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { ReactFlow, applyNodeChanges, applyEdgeChanges, addEdge, Background, type Node, type Edge, type NodeChange, type EdgeChange, type Connection, type Viewport, ConnectionLineType } from '@xyflow/react';
 import type { ProOptions } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useIndexedDB } from '../hooks/useIndexedDB';
 import { useTheme } from '../contexts/ThemeContext';
 import ThemeToggle from './ThemeToggle';
 import EditableNode from './EditableNode';
@@ -29,17 +30,18 @@ const initialViewport: Viewport = { x: 0, y: 0, zoom: 1 };
  
 export default function ERCanvas() {
   const { colors } = useTheme();
+  const { saveImage, getImage, deleteImage } = useIndexedDB();
   
   // Custom serialization for nodes - exclude imageUrl from localStorage
   const serializeNodes = useCallback((nodes: Node[]) => {
     return nodes.map(node => {
       if (node.type === 'imageNode' && node.data.imageUrl) {
-        // Don't store the image data, just a placeholder
+        // Don't store the image data in localStorage, it's in IndexedDB
         return {
           ...node,
           data: {
             ...node.data,
-            imageUrl: '[IMAGE_DATA_NOT_PERSISTED]',
+            imageUrl: undefined,
             _hasImage: true
           }
         };
@@ -48,31 +50,40 @@ export default function ERCanvas() {
     });
   }, []);
 
-  const deserializeNodes = useCallback((nodes: Node[]) => {
-    return nodes.map(node => {
-      if (node.type === 'imageNode' && node.data._hasImage && node.data.imageUrl === '[IMAGE_DATA_NOT_PERSISTED]') {
-        // Image nodes without data will show a placeholder
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            imageUrl: undefined,
-            _hasImage: false
-          }
-        };
-      }
-      return node;
-    });
-  }, []);
-
   const [storedNodes, setStoredNodes] = useLocalStorage<Node[]>('er-diagram-nodes', initialNodes);
-  const [nodes, setNodes] = useState<Node[]>(() => deserializeNodes(storedNodes));
+  const [nodes, setNodes] = useState<Node[]>(storedNodes);
   const [edges, setEdges] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
   const [viewport, setViewport] = useLocalStorage<Viewport>('er-diagram-viewport', initialViewport);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   
   // Ref to store ReactFlow instance for auto-focus
   const reactFlowInstance = useRef<any>(null);
+
+  // Load images from IndexedDB on mount
+  useEffect(() => {
+    const loadImages = async () => {
+      const updatedNodes = await Promise.all(
+        nodes.map(async (node) => {
+          if (node.type === 'imageNode' && node.data._hasImage && !node.data.imageUrl) {
+            const imageUrl = await getImage(node.id);
+            if (imageUrl) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  imageUrl,
+                },
+              };
+            }
+          }
+          return node;
+        })
+      );
+      setNodes(updatedNodes);
+    };
+
+    loadImages();
+  }, [getImage]); // Only run on mount
 
   // Sync nodes to localStorage (serialized without image data)
   const updateNodes = useCallback((newNodes: Node[] | ((prev: Node[]) => Node[])) => {
@@ -145,10 +156,20 @@ export default function ERCanvas() {
 
   // Handle node/edge deletion with Delete key
   const onNodesDelete = useCallback(
-    (deleted: Node[]) => {
+    async (deleted: Node[]) => {
+      // Delete images from IndexedDB for image nodes
+      const imageNodes = deleted.filter(node => node.type === 'imageNode');
+      if (imageNodes.length > 0) {
+        try {
+          await Promise.all(imageNodes.map(node => deleteImage(node.id)));
+        } catch (error) {
+          console.error('Failed to delete images from IndexedDB:', error);
+        }
+      }
+      
       updateNodes((nds) => nds.filter((node) => !deleted.find((d) => d.id === node.id)));
     },
-    [updateNodes],
+    [updateNodes, deleteImage],
   );
 
   const onEdgesDelete = useCallback(
@@ -227,10 +248,19 @@ export default function ERCanvas() {
   // Add image node from file
   const handleAddImageNode = useCallback((file: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const imageUrl = e.target?.result as string;
+      const nodeId = `image-node-${Date.now()}`;
+      
+      // Save image to IndexedDB
+      try {
+        await saveImage(nodeId, imageUrl);
+      } catch (error) {
+        console.error('Failed to save image to IndexedDB:', error);
+      }
+      
       const newNode: Node = {
-        id: `image-node-${Date.now()}`,
+        id: nodeId,
         type: 'imageNode',
         position: { 
           x: Math.random() * 400,
@@ -239,6 +269,7 @@ export default function ERCanvas() {
         data: { 
           imageUrl,
           label: file.name,
+          _hasImage: true,
         },
         style: {
           width: 300,
@@ -251,7 +282,7 @@ export default function ERCanvas() {
       focusOnNode(newNode.position.x + 150, newNode.position.y + 125);
     };
     reader.readAsDataURL(file);
-  }, [updateNodes, focusOnNode]);
+  }, [updateNodes, focusOnNode, saveImage]);
 
   // Enhanced edges with selection styling and border radius
   const styledEdges = useMemo(() =>
