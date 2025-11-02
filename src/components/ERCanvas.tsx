@@ -5,11 +5,13 @@ import '@xyflow/react/dist/style.css';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useIndexedDB } from '../hooks/useIndexedDB';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSettings } from '../contexts/SettingsContext';
 import ThemeToggle from './ThemeToggle';
 import EditableNode from './EditableNode';
 import ImageNode from './ImageNode';
 import EdgeContextMenu from './EdgeContextMenu';
 import AddNodeMenu from './AddNodeMenu';
+import SettingsMenu from './SettingsMenu';
 
 const proOptions: ProOptions = { account: "paid-pro", hideAttribution: true };
  
@@ -30,6 +32,7 @@ const initialViewport: Viewport = { x: 0, y: 0, zoom: 1 };
  
 export default function ERCanvas() {
   const { colors } = useTheme();
+  const { defaultEdgeType, defaultEdgeAnimated } = useSettings();
   const { saveImage, getImage, deleteImage } = useIndexedDB();
   
   // Custom serialization for nodes - exclude imageUrl from localStorage
@@ -141,12 +144,12 @@ export default function ERCanvas() {
   const onConnect = useCallback(
     (params: Connection) => setEdges((edgesSnapshot) => addEdge({
       ...params,
-      type: 'smoothstep',
-      animated: true,
+      type: defaultEdgeType,
+      animated: defaultEdgeAnimated,
       data: { borderRadius: 8 },
       ...({ borderRadius: 8 } as any),
     }, edgesSnapshot)),
-    [setEdges],
+    [setEdges, defaultEdgeType, defaultEdgeAnimated],
   );
 
   const onViewportChange = useCallback(
@@ -335,8 +338,8 @@ export default function ERCanvas() {
         deleteKeyCode="Delete"
         connectionLineType={ConnectionLineType.SmoothStep}
         defaultEdgeOptions={{
-          type: 'smoothstep',
-          animated: true,
+          type: defaultEdgeType,
+          animated: defaultEdgeAnimated,
           style: { stroke: colors.edgeColor, strokeWidth: 2 },
         }}
         style={{ backgroundColor: colors.background }}
@@ -345,6 +348,7 @@ export default function ERCanvas() {
       </ReactFlow>
       
       <ThemeToggle />
+      <SettingsMenu />
       <AddNodeMenu 
         onAddTextNode={handleAddTextNode}
         onAddImageNode={handleAddImageNode}

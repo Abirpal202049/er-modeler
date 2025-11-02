@@ -1,10 +1,13 @@
 import ERCanvas from "./components/ERCanvas";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { SettingsProvider } from "./contexts/SettingsContext";
 
 function App() {
   return (
     <ThemeProvider>
-      <ERCanvas />
+      <SettingsProvider>
+        <ERCanvas />
+      </SettingsProvider>
     </ThemeProvider>
   );
 }
