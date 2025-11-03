@@ -9,6 +9,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import ThemeToggle from './ThemeToggle';
 import EditableNode from './EditableNode';
 import ImageNode from './ImageNode';
+import ERNode, { type ERAttribute } from './ERNode';
 import EdgeContextMenu from './EdgeContextMenu';
 import AddNodeMenu from './AddNodeMenu';
 import SettingsMenu from './SettingsMenu';
@@ -117,18 +118,53 @@ export default function ERCanvas() {
     );
   }, [updateNodes]);
 
-  // Add onLabelChange to all nodes
-  const nodesWithHandlers = useMemo(() => 
-    nodes.map((node) => ({
-      ...node,
-      data: { ...node.data, onLabelChange: handleLabelChange }
-    })),
-    [nodes, handleLabelChange]
+  // Handle ER entity name change
+  const handleEntityNameChange = useCallback((nodeId: string, newName: string) => {
+    updateNodes((nds) =>
+      nds.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, entityName: newName } }
+          : node
+      )
+    );
+  }, [updateNodes]);
+
+  // Handle ER attributes change
+  const handleAttributesChange = useCallback((nodeId: string, newAttributes: ERAttribute[]) => {
+    updateNodes((nds) =>
+      nds.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, attributes: newAttributes } }
+          : node
+      )
+    );
+  }, [updateNodes]);
+
+  // Add handlers to all nodes
+  const nodesWithHandlers = useMemo(() =>
+    nodes.map((node) => {
+      if (node.type === 'erNode') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            onEntityNameChange: handleEntityNameChange,
+            onAttributesChange: handleAttributesChange,
+          }
+        };
+      }
+      return {
+        ...node,
+        data: { ...node.data, onLabelChange: handleLabelChange }
+      };
+    }),
+    [nodes, handleLabelChange, handleEntityNameChange, handleAttributesChange]
   );
 
-  const nodeTypes = useMemo(() => ({ 
+  const nodeTypes = useMemo(() => ({
     editableNode: EditableNode,
     imageNode: ImageNode,
+    erNode: ERNode,
   }), []);
  
   const onNodesChange = useCallback(
@@ -254,22 +290,22 @@ export default function ERCanvas() {
     reader.onload = async (e) => {
       const imageUrl = e.target?.result as string;
       const nodeId = `image-node-${Date.now()}`;
-      
+
       // Save image to IndexedDB
       try {
         await saveImage(nodeId, imageUrl);
       } catch (error) {
         console.error('Failed to save image to IndexedDB:', error);
       }
-      
+
       const newNode: Node = {
         id: nodeId,
         type: 'imageNode',
-        position: { 
+        position: {
           x: Math.random() * 400,
           y: Math.random() * 400,
         },
-        data: { 
+        data: {
           imageUrl,
           label: file.name,
           _hasImage: true,
@@ -280,12 +316,36 @@ export default function ERCanvas() {
         },
       };
       updateNodes((nds) => [...nds, newNode]);
-      
+
       // Auto-focus on the new image node
       focusOnNode(newNode.position.x + 150, newNode.position.y + 125);
     };
     reader.readAsDataURL(file);
   }, [updateNodes, focusOnNode, saveImage]);
+
+  // Add new ER entity node
+  const handleAddERNode = useCallback(() => {
+    const newNode: Node = {
+      id: `er-node-${Date.now()}`,
+      type: 'erNode',
+      position: {
+        x: Math.random() * 400,
+        y: Math.random() * 400,
+      },
+      data: {
+        entityName: 'Entity',
+        attributes: [
+          { id: 'attr-1', name: 'id', type: 'INT', isPrimaryKey: true },
+          { id: 'attr-2', name: 'name', type: 'VARCHAR', isPrimaryKey: false },
+        ],
+        headerColor: colors.primary,
+      },
+    };
+    updateNodes((nds) => [...nds, newNode]);
+
+    // Auto-focus on the new ER node
+    focusOnNode(newNode.position.x + 140, newNode.position.y + 100);
+  }, [updateNodes, focusOnNode, colors.primary]);
 
   // Enhanced edges with selection styling and border radius
   const styledEdges = useMemo(() =>
@@ -349,9 +409,10 @@ export default function ERCanvas() {
       
       <ThemeToggle />
       <SettingsMenu />
-      <AddNodeMenu 
+      <AddNodeMenu
         onAddTextNode={handleAddTextNode}
         onAddImageNode={handleAddImageNode}
+        onAddERNode={handleAddERNode}
       />
 
       {contextMenu && (() => {

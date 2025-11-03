@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react';
-import { Plus, Image, X, Square } from 'lucide-react';
+import { Plus, Image, X, Square, Table } from 'lucide-react';
 
 interface AddNodeMenuProps {
   onAddTextNode: () => void;
   onAddImageNode: (file: File) => void;
+  onAddERNode: () => void;
 }
 
-export default function AddNodeMenu({ onAddTextNode, onAddImageNode }: AddNodeMenuProps) {
+export default function AddNodeMenu({ onAddTextNode, onAddImageNode, onAddERNode }: AddNodeMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +32,11 @@ export default function AddNodeMenu({ onAddTextNode, onAddImageNode }: AddNodeMe
     setIsOpen(false);
   };
 
+  const handleAddERNode = () => {
+    onAddERNode();
+    setIsOpen(false);
+  };
+
   return (
     <>
       {/* Hidden file input */}
@@ -48,6 +54,19 @@ export default function AddNodeMenu({ onAddTextNode, onAddImageNode }: AddNodeMe
         {isOpen && (
           <div className="flex flex-col gap-2 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <button
+              onClick={handleAddERNode}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl"
+              style={{
+                backgroundColor: '#2a2a2a',
+                color: '#ffffff',
+              }}
+              title="Add ER entity"
+            >
+              <Table className="w-5 h-5" />
+              <span className="text-sm font-medium whitespace-nowrap">Add ER Entity</span>
+            </button>
+
+            <button
               onClick={handleAddTextNode}
               className="flex items-center gap-3 px-4 py-2.5 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl"
               style={{
@@ -59,7 +78,7 @@ export default function AddNodeMenu({ onAddTextNode, onAddImageNode }: AddNodeMe
               <Square className="w-5 h-5" />
               <span className="text-sm font-medium whitespace-nowrap">Add Text Node</span>
             </button>
-            
+
             <button
               onClick={handleImageClick}
               className="flex items-center gap-3 px-4 py-2.5 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl"
