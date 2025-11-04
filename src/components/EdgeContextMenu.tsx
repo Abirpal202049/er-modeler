@@ -61,14 +61,22 @@ export default function EdgeContextMenu({
     onClose();
   };
 
+  // Approximate menu dimensions
+  const menuWidth = 180;
+  const menuHeight = 380; // Approximate height with all sections
+
+  // Adjust position if menu would go off-screen
+  const adjustedLeft = left + menuWidth > window.innerWidth ? window.innerWidth - menuWidth - 10 : left;
+  const adjustedTop = top + menuHeight > window.innerHeight ? window.innerHeight - menuHeight - 10 : top;
+
   return (
     <>
       {/* Context Menu */}
       <div
         className="fixed z-50 min-w-[180px] rounded shadow-2xl overflow-hidden"
         style={{
-          top: `${top}px`,
-          left: `${left}px`,
+          top: `${adjustedTop}px`,
+          left: `${adjustedLeft}px`,
           backgroundColor: '#2a2a2a',
           border: '1px solid #3a3a3a',
         }}
