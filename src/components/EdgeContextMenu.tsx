@@ -5,10 +5,15 @@ interface EdgeContextMenuProps {
   edge: {
     type?: string;
     animated?: boolean;
+    style?: {
+      stroke?: string;
+      [key: string]: any;
+    };
   };
   onClose: () => void;
   onChangeType: (edgeId: string, type: string) => void;
   onToggleAnimation: (edgeId: string) => void;
+  onChangeColor: (edgeId: string, color: string) => void;
   onDelete: (edgeId: string) => void;
 }
 
@@ -20,6 +25,7 @@ export default function EdgeContextMenu({
   onClose, 
   onChangeType,
   onToggleAnimation,
+  onChangeColor,
   onDelete,
 }: EdgeContextMenuProps) {
   const edgeTypes = [
@@ -27,6 +33,14 @@ export default function EdgeContextMenu({
     { value: 'smoothstep', label: 'Smooth Step' },
     { value: 'step', label: 'Step' },
     { value: 'bezier', label: 'Bezier' },
+  ];
+
+  const edgeColors = [
+    { value: '#94a3b8', label: 'Gray' },
+    { value: '#3b82f6', label: 'Blue' },
+    { value: '#10b981', label: 'Green' },
+    { value: '#f59e0b', label: 'Orange' },
+    { value: '#ef4444', label: 'Red' },
   ];
 
   const handleTypeChange = (type: string) => {
@@ -38,6 +52,10 @@ export default function EdgeContextMenu({
     onToggleAnimation(id);
   };
 
+  const handleChangeColor = (color: string) => {
+    onChangeColor(id, color);
+  };
+
   const handleDelete = () => {
     onDelete(id);
     onClose();
@@ -45,12 +63,6 @@ export default function EdgeContextMenu({
 
   return (
     <>
-      {/* Backdrop to close menu */}
-      <div 
-        className="fixed inset-0 z-40" 
-        onClick={onClose}
-      />
-      
       {/* Context Menu */}
       <div
         className="fixed z-50 min-w-[180px] rounded shadow-2xl overflow-hidden"
@@ -59,6 +71,9 @@ export default function EdgeContextMenu({
           left: `${left}px`,
           backgroundColor: '#2a2a2a',
           border: '1px solid #3a3a3a',
+        }}
+        onContextMenu={(e) => {
+          e.stopPropagation();
         }}
       >
         {/* Header */}
@@ -130,6 +145,31 @@ export default function EdgeContextMenu({
               {edge.animated ? 'ON' : 'OFF'}
             </span>
           </button>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px" style={{ backgroundColor: '#1a1a1a' }} />
+
+        {/* Color Options */}
+        <div className="py-1.5 px-3" style={{ backgroundColor: '#2a2a2a' }}>
+          <div className="text-xs font-medium mb-1.5" style={{ color: '#a0a0a0' }}>
+            Edge Color
+          </div>
+          <div className="flex gap-2 justify-center">
+            {edgeColors.map((color) => (
+              <button
+                key={color.value}
+                onClick={() => handleChangeColor(color.value)}
+                className="w-7 h-7 rounded-full border-2 transition-all duration-150 hover:scale-110"
+                style={{
+                  backgroundColor: color.value,
+                  borderColor: edge.style?.stroke === color.value ? '#ffffff' : '#3a3a3a',
+                  boxShadow: edge.style?.stroke === color.value ? `0 0 0 2px ${color.value}` : 'none',
+                }}
+                title={color.label}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Divider */}

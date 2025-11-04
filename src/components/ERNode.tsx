@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Key, Plus, X } from 'lucide-react';
+import { Key, Plus, X, Link, Table2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { DATABASE_TYPES } from '../constants/databaseTypes';
 
@@ -9,6 +9,11 @@ export interface ERAttribute {
   name: string;
   type: string;
   isPrimaryKey?: boolean;
+  isForeignKey?: boolean;
+  referencedEntity?: string;
+  referencedAttribute?: string;
+  referencedNodeId?: string;
+  referencedAttributeId?: string;
 }
 
 export interface ERNodeData {
@@ -17,6 +22,7 @@ export interface ERNodeData {
   onEntityNameChange?: (nodeId: string, newName: string) => void;
   onAttributesChange?: (nodeId: string, newAttributes: ERAttribute[]) => void;
   headerColor?: string;
+  availableEntities?: { id: string; name: string; attributes: ERAttribute[] }[];
 }
 
 function ERNode({ id, data, selected }: NodeProps) {
@@ -27,6 +33,7 @@ function ERNode({ id, data, selected }: NodeProps) {
   const [editingAttributeId, setEditingAttributeId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingType, setEditingType] = useState('');
+  const [fkModalAttributeId, setFkModalAttributeId] = useState<string | null>(null);
 
   const headerColor = nodeData.headerColor || colors.primary;
 
@@ -119,6 +126,53 @@ function ERNode({ id, data, selected }: NodeProps) {
     setEditingType(e.target.value);
   };
 
+  const handleToggleForeignKey = (attrId: string) => {
+    const attr = nodeData.attributes.find(a => a.id === attrId);
+    if (attr?.isForeignKey) {
+      // Remove foreign key
+      const newAttributes = nodeData.attributes.map(a =>
+        a.id === attrId ? {
+          ...a,
+          isForeignKey: false,
+          referencedEntity: undefined,
+          referencedAttribute: undefined,
+          referencedNodeId: undefined,
+          referencedAttributeId: undefined,
+        } : a
+      );
+      if (nodeData.onAttributesChange) {
+        nodeData.onAttributesChange(id, newAttributes);
+      }
+    } else {
+      // Open modal to select foreign key reference
+      setFkModalAttributeId(attrId);
+    }
+  };
+
+  const handleSetForeignKey = (entityId: string, attributeId: string) => {
+    if (fkModalAttributeId) {
+      const referencedEntity = nodeData.availableEntities?.find(e => e.id === entityId);
+      const referencedAttr = referencedEntity?.attributes.find(a => a.id === attributeId);
+
+      const newAttributes = nodeData.attributes.map(attr =>
+        attr.id === fkModalAttributeId
+          ? {
+              ...attr,
+              isForeignKey: true,
+              referencedEntity: referencedEntity?.name,
+              referencedAttribute: referencedAttr?.name,
+              referencedNodeId: entityId,
+              referencedAttributeId: attributeId,
+            }
+          : attr
+      );
+      if (nodeData.onAttributesChange) {
+        nodeData.onAttributesChange(id, newAttributes);
+      }
+    }
+    setFkModalAttributeId(null);
+  };
+
   return (
     <div
       className="rounded-lg overflow-hidden shadow-lg transition-shadow duration-200 group"
@@ -157,21 +211,11 @@ function ERNode({ id, data, selected }: NodeProps) {
 
       {/* Header */}
       <div
-        className="px-4 py-2.5 flex items-center gap-2"
+        className="px-4 py-2.5 flex items-center gap-2 cursor-grab"
         style={{ backgroundColor: headerColor }}
       >
         <div className="flex items-center gap-2 flex-1">
-          <div className="grid grid-cols-3 gap-0.5">
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-            <div className="w-1.5 h-1.5 bg-white/90 rounded-sm"></div>
-          </div>
+          <Table2 size={20} className='text-white' />
           {isEditingEntity ? (
             <input
               type="text"
@@ -184,7 +228,7 @@ function ERNode({ id, data, selected }: NodeProps) {
             />
           ) : (
             <span
-              className="flex-1 text-white font-semibold text-sm cursor-text"
+              className="flex-1 text-white font-semibold text-sm cursor-grab"
               onDoubleClick={handleEntityNameDoubleClick}
               title="Double-click to edit"
             >
@@ -205,7 +249,22 @@ function ERNode({ id, data, selected }: NodeProps) {
             }}
           >
             {editingAttributeId === attr.id ? (
-              <div className="px-3 py-2 flex items-center gap-2">
+              <div className="px-3 py-2 flex items-center gap-2 relative">
+                {/* Attribute-specific connection handles */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`${id}-${attr.id}-source`}
+                  className="w-2! h-2! border! bg-blue-400! opacity-0 group-hover/row:opacity-100"
+                  style={{ right: '-8px', top: '50%', transform: 'translateY(-50%)' }}
+                />
+                <Handle
+                  type="target"
+                  position={Position.Left}
+                  id={`${id}-${attr.id}-target`}
+                  className="w-2! h-2! border! bg-blue-400! opacity-0 group-hover/row:opacity-100"
+                  style={{ left: '-8px', top: '50%', transform: 'translateY(-50%)' }}
+                />
                 <div className="flex-1 flex items-center gap-2">
                   {attr.isPrimaryKey && <Key className="w-3.5 h-3.5" style={{ color: colors.accent }} />}
                   <input
@@ -255,16 +314,37 @@ function ERNode({ id, data, selected }: NodeProps) {
                 </button>
               </div>
             ) : (
-              <div className="px-3 py-2 flex items-center justify-between gap-2">
+              <div className="px-3 py-2 flex items-center justify-between gap-2 relative">
+                {/* Attribute-specific connection handles */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`${id}-${attr.id}-source`}
+                  className="w-2! h-2! border! bg-blue-400! opacity-0 group-hover/row:opacity-100"
+                  style={{ right: '-8px', top: '50%', transform: 'translateY(-50%)' }}
+                />
+                <Handle
+                  type="target"
+                  position={Position.Left}
+                  id={`${id}-${attr.id}-target`}
+                  className="w-2! h-2! border! bg-blue-400! opacity-0 group-hover/row:opacity-100"
+                  style={{ left: '-8px', top: '50%', transform: 'translateY(-50%)' }}
+                />
                 <div
                   className="flex-1 flex items-center gap-2 cursor-text"
                   onDoubleClick={() => startEditingAttribute(attr)}
                   title="Double-click to edit"
                 >
                   {attr.isPrimaryKey && <Key className="w-3.5 h-3.5" style={{ color: colors.accent }} />}
+                  {attr.isForeignKey && <Link className="w-3.5 h-3.5" style={{ color: '#3b82f6' }} />}
                   <span className="text-xs font-medium" style={{ color: colors.nodeText }}>
                     {attr.name}
                   </span>
+                  {attr.isForeignKey && attr.referencedEntity && (
+                    <span className="text-xs opacity-50 italic" style={{ color: colors.nodeText }}>
+                      → {attr.referencedEntity}.{attr.referencedAttribute}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs opacity-60" style={{ color: colors.nodeText }}>
@@ -279,6 +359,16 @@ function ERNode({ id, data, selected }: NodeProps) {
                       <Key
                         className="w-3.5 h-3.5"
                         style={{ color: attr.isPrimaryKey ? colors.accent : colors.nodeText }}
+                      />
+                    </button>
+                    <button
+                      onClick={() => handleToggleForeignKey(attr.id)}
+                      className="p-1 rounded hover:bg-blue-500/20 transition-colors"
+                      title={attr.isForeignKey ? 'Remove foreign key' : 'Set as foreign key'}
+                    >
+                      <Link
+                        className="w-3.5 h-3.5"
+                        style={{ color: attr.isForeignKey ? '#3b82f6' : colors.nodeText }}
                       />
                     </button>
                     <button
@@ -310,6 +400,65 @@ function ERNode({ id, data, selected }: NodeProps) {
           <span>Add Attribute</span>
         </button>
       </div>
+
+      {/* Foreign Key Selection Modal */}
+      {fkModalAttributeId && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setFkModalAttributeId(null)}
+        >
+          <div
+            className="rounded-lg shadow-xl p-4 max-w-md w-full mx-4"
+            style={{ backgroundColor: colors.nodeBg }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold" style={{ color: colors.nodeText }}>
+                Select Foreign Key Reference
+              </h3>
+              <button
+                onClick={() => setFkModalAttributeId(null)}
+                className="p-1 rounded hover:bg-red-500/20 transition-colors"
+              >
+                <X className="w-4 h-4 text-red-500" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {nodeData.availableEntities && nodeData.availableEntities.length > 0 ? (
+                nodeData.availableEntities.map((entity) => (
+                  <div key={entity.id} className="mb-3">
+                    <div
+                      className="font-medium text-sm mb-1 px-2 py-1 rounded"
+                      style={{ color: colors.nodeText, backgroundColor: colors.border + '40' }}
+                    >
+                      {entity.name}
+                    </div>
+                    <div className="space-y-1">
+                      {entity.attributes.map((attr) => (
+                        <button
+                          key={attr.id}
+                          onClick={() => handleSetForeignKey(entity.id, attr.id)}
+                          className="w-full text-left px-3 py-2 rounded text-xs hover:bg-white/10 transition-colors flex items-center gap-2"
+                          style={{ color: colors.nodeText }}
+                        >
+                          {attr.isPrimaryKey && <Key className="w-3 h-3" style={{ color: colors.accent }} />}
+                          <span>{attr.name}</span>
+                          <span className="opacity-60">({attr.type})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-sm opacity-60" style={{ color: colors.nodeText }}>
+                  No other entities available. Create more ER nodes to establish foreign key relationships.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

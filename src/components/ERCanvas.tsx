@@ -11,6 +11,7 @@ import EditableNode from './EditableNode';
 import ImageNode from './ImageNode';
 import ERNode, { type ERAttribute } from './ERNode';
 import EdgeContextMenu from './EdgeContextMenu';
+import CanvasContextMenu from './CanvasContextMenu';
 import AddNodeMenu from './AddNodeMenu';
 import SettingsMenu from './SettingsMenu';
 
@@ -58,7 +59,8 @@ export default function ERCanvas() {
   const [nodes, setNodes] = useState<Node[]>(storedNodes);
   const [edges, setEdges] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
   const [viewport, setViewport] = useLocalStorage<Viewport>('er-diagram-viewport', initialViewport);
-  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [edgeContextMenu, setEdgeContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number } | null>(null);
   
   // Ref to store ReactFlow instance for auto-focus
   const reactFlowInstance = useRef<any>(null);
@@ -88,6 +90,9 @@ export default function ERCanvas() {
 
     loadImages();
   }, [getImage]); // Only run on mount
+
+  // Ref for file input to trigger image upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync nodes to localStorage (serialized without image data)
   const updateNodes = useCallback((newNodes: Node[] | ((prev: Node[]) => Node[])) => {
@@ -140,16 +145,62 @@ export default function ERCanvas() {
     );
   }, [updateNodes]);
 
+  // Generate foreign key edges based on node attributes
+  const foreignKeyEdges = useMemo(() => {
+    const fkEdges: Edge[] = [];
+
+    nodes.forEach((node) => {
+      if (node.type === 'erNode' && node.data.attributes && Array.isArray(node.data.attributes)) {
+        (node.data.attributes as ERAttribute[]).forEach((attr) => {
+          if (attr.isForeignKey && attr.referencedNodeId && attr.referencedAttributeId) {
+            const edgeId = `fk-${node.id}-${attr.id}`;
+            fkEdges.push({
+              id: edgeId,
+              source: node.id,
+              target: attr.referencedNodeId,
+              sourceHandle: `${node.id}-${attr.id}-source`,
+              targetHandle: `${attr.referencedNodeId}-${attr.referencedAttributeId}-target`,
+              type: 'smoothstep',
+              animated: false,
+              style: {
+                stroke: '#3b82f6',
+                strokeWidth: 2,
+                strokeDasharray: '5,5',
+              },
+              markerEnd: {
+                type: 'arrowclosed' as const,
+                color: '#3b82f6',
+              },
+              data: { isForeignKey: true },
+            });
+          }
+        });
+      }
+    });
+
+    return fkEdges;
+  }, [nodes]);
+
   // Add handlers to all nodes
   const nodesWithHandlers = useMemo(() =>
     nodes.map((node) => {
       if (node.type === 'erNode') {
+        // Get all other ER nodes as available entities for foreign key selection
+        const availableEntities = nodes
+          .filter(n => n.type === 'erNode' && n.id !== node.id)
+          .map(n => ({
+            id: n.id,
+            name: n.data.entityName || 'Unnamed',
+            attributes: n.data.attributes || []
+          }));
+
         return {
           ...node,
           data: {
             ...node.data,
             onEntityNameChange: handleEntityNameChange,
             onAttributesChange: handleAttributesChange,
+            availableEntities,
           }
         };
       }
@@ -222,8 +273,22 @@ export default function ERCanvas() {
   const onEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       event.preventDefault();
-      setContextMenu({
+      setCanvasContextMenu(null);
+      setEdgeContextMenu({
         id: edge.id,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [],
+  );
+
+  // Handle canvas context menu (right-click on empty space)
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      event.preventDefault();
+      setEdgeContextMenu(null);
+      setCanvasContextMenu({
         x: event.clientX,
         y: event.clientY,
       });
@@ -254,6 +319,37 @@ export default function ERCanvas() {
             ? { ...edge, animated: !edge.animated }
             : edge
         )
+      );
+    },
+    [setEdges],
+  );
+
+  // Change edge color
+  const handleChangeEdgeColor = useCallback(
+    (edgeId: string, color: string) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === edgeId) {
+            const updatedEdge: Edge = {
+              ...edge,
+              style: {
+                ...edge.style,
+                stroke: color,
+              },
+            };
+            
+            // Update marker color if it exists
+            if (edge.markerEnd && typeof edge.markerEnd === 'object' && 'type' in edge.markerEnd) {
+              updatedEdge.markerEnd = {
+                ...(edge.markerEnd as any),
+                color: color,
+              };
+            }
+            
+            return updatedEdge;
+          }
+          return edge;
+        })
       );
     },
     [setEdges],
@@ -347,15 +443,67 @@ export default function ERCanvas() {
     focusOnNode(newNode.position.x + 140, newNode.position.y + 100);
   }, [updateNodes, focusOnNode, colors.primary]);
 
+  // Handle file input change
+  const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleAddImageNode(file);
+      // Reset input so same file can be selected again
+      event.target.value = '';
+    }
+  }, [handleAddImageNode]);
+
+  // Keyboard shortcuts for adding nodes
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Cmd/Ctrl + E: Add ER Entity
+      if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
+        event.preventDefault();
+        handleAddERNode();
+      }
+      // Cmd/Ctrl + T: Add Text Node
+      else if ((event.metaKey || event.ctrlKey) && event.key === 't') {
+        event.preventDefault();
+        handleAddTextNode();
+      }
+      // Cmd/Ctrl + I: Add Image Node (trigger file input)
+      else if ((event.metaKey || event.ctrlKey) && event.key === 'i') {
+        event.preventDefault();
+        fileInputRef.current?.click();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleAddERNode, handleAddTextNode]);
+
   // Enhanced edges with selection styling and border radius
-  const styledEdges = useMemo(() =>
-    edges.map((edge) => {
+  const styledEdges = useMemo(() => {
+    // Filter out user-created edges (non-FK edges)
+    const userEdges = edges.filter(edge => !edge.data?.isForeignKey);
+
+    // Combine user edges with foreign key edges
+    const allEdges = [...userEdges, ...foreignKeyEdges];
+
+    return allEdges.map((edge) => {
+      // Determine stroke color: use custom color if set, otherwise use defaults
+      const customStroke = edge.style?.stroke;
+      const defaultStroke = edge.data?.isForeignKey ? '#3b82f6' : colors.edgeColor;
+      const strokeColor = customStroke || defaultStroke;
+
       const baseEdge: any = {
         ...edge,
         style: {
           ...edge.style,
-          stroke: edge.selected ? colors.nodeBorder : colors.edgeColor,
+          stroke: strokeColor,
           strokeWidth: edge.selected ? 3 : 2,
+          opacity: edge.selected ? 0.85 : 1,
         },
         data: edge.data || {},
       };
@@ -371,14 +519,16 @@ export default function ERCanvas() {
       }
 
       return baseEdge as Edge;
-    }),
-    [edges, colors]
-  );
+    });
+  }, [edges, foreignKeyEdges, colors]);
 
   return (
     <div 
       className="w-screen h-screen" 
-      onClick={() => setContextMenu(null)}
+      onClick={() => {
+        setEdgeContextMenu(null);
+        setCanvasContextMenu(null);
+      }}
       style={{ backgroundColor: colors.background }}
     >
       <ReactFlow
@@ -392,6 +542,7 @@ export default function ERCanvas() {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onEdgeContextMenu={onEdgeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         onViewportChange={onViewportChange}
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         defaultViewport={viewport}
@@ -415,23 +566,46 @@ export default function ERCanvas() {
         onAddERNode={handleAddERNode}
       />
 
-      {contextMenu && (() => {
-        const edge = edges.find(e => e.id === contextMenu.id);
+      {/* Canvas Context Menu */}
+      {canvasContextMenu && (
+        <CanvasContextMenu
+          top={canvasContextMenu.y}
+          left={canvasContextMenu.x}
+          onClose={() => setCanvasContextMenu(null)}
+          onAddTextNode={handleAddTextNode}
+          onAddERNode={handleAddERNode}
+          onAddImageNode={() => fileInputRef.current?.click()}
+        />
+      )}
+
+      {/* Edge Context Menu */}
+      {edgeContextMenu && (() => {
+        const edge = edges.find(e => e.id === edgeContextMenu.id);
         if (!edge) return null;
         
         return (
           <EdgeContextMenu
-            id={contextMenu.id}
-            top={contextMenu.y}
-            left={contextMenu.x}
+            id={edgeContextMenu.id}
+            top={edgeContextMenu.y}
+            left={edgeContextMenu.x}
             edge={edge}
-            onClose={() => setContextMenu(null)}
+            onClose={() => setEdgeContextMenu(null)}
             onChangeType={handleChangeEdgeType}
             onToggleAnimation={handleToggleAnimation}
+            onChangeColor={handleChangeEdgeColor}
             onDelete={handleDeleteEdge}
           />
         );
       })()}
+
+      {/* Hidden file input for keyboard shortcut */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileInputChange}
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }

@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+/* Edge hover effects */
+.react-flow__edge-path {
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3 !important;
+  opacity: 0.8;
+  filter: brightness(1.2);
+}
+
+.react-flow__edge.selected:hover .react-flow__edge-path {
+  stroke-width: 4 !important;
+  opacity: 0.9;
+  filter: brightness(1.1);
+}
+
+/* Selected edge effects - keeps original color with glow */
+.react-flow__edge.selected .react-flow__edge-path {
+  filter: drop-shadow(0 0 4px currentColor) brightness(1.15);
+}
+
+/* Edge marker (arrow) hover effects */
+.react-flow__edge:hover .react-flow__arrowhead {
+  opacity: 0.8;
+  filter: brightness(1.2);
+}
+
+.react-flow__edge.selected:hover .react-flow__arrowhead {
+  opacity: 0.9;
+  filter: brightness(1.1);
+}
+
+/* Selected edge marker effects */
+.react-flow__edge.selected .react-flow__arrowhead {
+  filter: drop-shadow(0 0 3px currentColor) brightness(1.15);
+}
