@@ -2,20 +2,24 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 export type EdgeType = 'default' | 'smoothstep' | 'step' | 'bezier' | 'straight';
+export type EdgeMode = 'normal' | 'floating' | 'simple-floating';
 
 interface Settings {
   defaultEdgeType: EdgeType;
   defaultEdgeAnimated: boolean;
+  edgeMode: EdgeMode;
 }
 
 interface SettingsContextType extends Settings {
   setDefaultEdgeType: (type: EdgeType) => void;
   setDefaultEdgeAnimated: (animated: boolean) => void;
+  setEdgeMode: (mode: EdgeMode) => void;
 }
 
 const defaultSettings: Settings = {
   defaultEdgeType: 'smoothstep',
   defaultEdgeAnimated: true,
+  edgeMode: 'simple-floating',
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -31,12 +35,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings(prev => ({ ...prev, defaultEdgeAnimated: animated }));
   };
 
+  const setEdgeMode = (mode: EdgeMode) => {
+    setSettings(prev => ({ ...prev, edgeMode: mode }));
+  };
+
   return (
     <SettingsContext.Provider
       value={{
         ...settings,
         setDefaultEdgeType,
         setDefaultEdgeAnimated,
+        setEdgeMode,
       }}
     >
       {children}

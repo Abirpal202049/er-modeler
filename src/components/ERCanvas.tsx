@@ -14,6 +14,9 @@ import EdgeContextMenu from './EdgeContextMenu';
 import CanvasContextMenu from './CanvasContextMenu';
 import AddNodeMenu from './AddNodeMenu';
 import SettingsMenu from './SettingsMenu';
+import FloatingEdge from './FloatingEdge';
+import SimpleFloatingEdge from './SimpleFloatingEdge';
+import FloatingConnectionLine from './FloatingConnectionLine';
 
 const proOptions: ProOptions = { account: "paid-pro", hideAttribution: true };
  
@@ -21,20 +24,23 @@ const initialNodes: Node[] = [
   { id: 'n1', type: 'editableNode', position: { x: 0, y: 0 }, data: { label: 'Node 1' } },
   { id: 'n2', type: 'editableNode', position: { x: 0, y: 100 }, data: { label: 'Node 2' } },
 ];
-const initialEdges: Edge[] = [{ 
-  id: 'n1-n2', 
-  source: 'n1', 
+const initialEdges: Edge[] = [{
+  id: 'n1-n2',
+  source: 'n1',
   target: 'n2',
-  type: 'smoothstep',
+  type: 'simple-floating',
   animated: true,
-  data: { borderRadius: 8 },
+  data: {
+    borderRadius: 8,
+    type: 'smoothstep', // Store the visual edge type in data
+  },
   ...({ borderRadius: 8 } as any),
 }];
 const initialViewport: Viewport = { x: 0, y: 0, zoom: 1 };
  
 export default function ERCanvas() {
   const { colors } = useTheme();
-  const { defaultEdgeType, defaultEdgeAnimated } = useSettings();
+  const { defaultEdgeType, defaultEdgeAnimated, edgeMode } = useSettings();
   const { saveImage, getImage, deleteImage } = useIndexedDB();
   
   // Custom serialization for nodes - exclude imageUrl from localStorage
@@ -57,8 +63,60 @@ export default function ERCanvas() {
 
   const [storedNodes, setStoredNodes] = useLocalStorage<Node[]>('er-diagram-nodes', initialNodes);
   const [nodes, setNodes] = useState<Node[]>(storedNodes);
-  const [edges, setEdges] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
+
+  // Migrate existing edges based on edge mode
+  const migrateEdges = useCallback((edges: Edge[]): Edge[] => {
+    return edges.map(edge => {
+      // Skip edges with individual mode overrides (marked with hasIndividualMode flag)
+      if (edge.data?.hasIndividualMode) {
+        return edge;
+      }
+
+      // If using normal mode, keep edges as-is but ensure they have the correct structure
+      if (edgeMode === 'normal') {
+        // If edge was floating/simple-floating, convert back to normal
+        if (edge.type === 'floating' || edge.type === 'simple-floating') {
+          const visualType = edge.data?.type || 'smoothstep';
+          return {
+            ...edge,
+            type: visualType as string,
+            data: edge.data,
+          };
+        }
+        return edge;
+      }
+
+      // If edge is already the correct floating type, return as-is
+      if (edge.type === edgeMode) {
+        return edge;
+      }
+
+      // Migrate edge to the current edge mode (floating or simple-floating)
+      const newEdgeType = edgeMode as string;
+      return {
+        ...edge,
+        type: newEdgeType,
+        data: {
+          ...edge.data,
+          type: edge.data?.type || edge.type || 'smoothstep', // Store original visual type in data
+        },
+      };
+    });
+  }, [edgeMode]);
+
+  const [storedEdges, setStoredEdges] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
+  const [edges, setEdges] = useState<Edge[]>(() => migrateEdges(storedEdges));
   const [viewport, setViewport] = useLocalStorage<Viewport>('er-diagram-viewport', initialViewport);
+
+  // Update edges when edge mode changes
+  useEffect(() => {
+    setEdges((currentEdges) => migrateEdges(currentEdges));
+  }, [edgeMode, migrateEdges]);
+
+  // Update localStorage with edges
+  useEffect(() => {
+    setStoredEdges(edges);
+  }, [edges, setStoredEdges]);
   const [edgeContextMenu, setEdgeContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number } | null>(null);
   
@@ -160,7 +218,7 @@ export default function ERCanvas() {
               target: attr.referencedNodeId,
               sourceHandle: `${node.id}-${attr.id}-source`,
               targetHandle: `${attr.referencedNodeId}-${attr.referencedAttributeId}-target`,
-              type: 'smoothstep',
+              type: edgeMode === 'normal' ? 'smoothstep' : edgeMode, // Use edge mode
               animated: false,
               style: {
                 stroke: '#3b82f6',
@@ -171,7 +229,10 @@ export default function ERCanvas() {
                 type: 'arrowclosed' as const,
                 color: '#3b82f6',
               },
-              data: { isForeignKey: true },
+              data: {
+                isForeignKey: true,
+                type: 'smoothstep', // Store the visual edge type in data
+              },
             });
           }
         });
@@ -179,7 +240,7 @@ export default function ERCanvas() {
     });
 
     return fkEdges;
-  }, [nodes]);
+  }, [nodes, edgeMode]);
 
   // Add handlers to all nodes
   const nodesWithHandlers = useMemo(() =>
@@ -217,6 +278,11 @@ export default function ERCanvas() {
     imageNode: ImageNode,
     erNode: ERNode,
   }), []);
+
+  const edgeTypes = useMemo(() => ({
+    floating: FloatingEdge,
+    'simple-floating': SimpleFloatingEdge,
+  }), []);
  
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => updateNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
@@ -225,18 +291,21 @@ export default function ERCanvas() {
   
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
-    [setEdges],
+    [],
   );
   
   const onConnect = useCallback(
     (params: Connection) => setEdges((edgesSnapshot) => addEdge({
       ...params,
-      type: defaultEdgeType,
+      type: edgeMode === 'normal' ? defaultEdgeType : edgeMode, // Use edge mode or default type for normal mode
       animated: defaultEdgeAnimated,
-      data: { borderRadius: 8 },
+      data: {
+        borderRadius: 8,
+        type: defaultEdgeType, // Store the visual edge type in data
+      },
       ...({ borderRadius: 8 } as any),
     }, edgesSnapshot)),
-    [setEdges, defaultEdgeType, defaultEdgeAnimated],
+    [defaultEdgeType, defaultEdgeAnimated, edgeMode],
   );
 
   const onViewportChange = useCallback(
@@ -266,7 +335,7 @@ export default function ERCanvas() {
     (deleted: Edge[]) => {
       setEdges((eds) => eds.filter((edge) => !deleted.find((d) => d.id === edge.id)));
     },
-    [setEdges],
+    [],
   );
 
   // Handle edge context menu (right-click)
@@ -296,18 +365,24 @@ export default function ERCanvas() {
     [],
   );
 
-  // Change edge type
+  // Change edge type (visual type stored in data, actual type remains 'floating')
   const handleChangeEdgeType = useCallback(
     (edgeId: string, newType: string) => {
       setEdges((eds) =>
         eds.map((edge) =>
           edge.id === edgeId
-            ? { ...edge, type: newType }
+            ? {
+                ...edge,
+                data: {
+                  ...edge.data,
+                  type: newType, // Store visual edge type in data
+                }
+              }
             : edge
         )
       );
     },
-    [setEdges],
+    [],
   );
 
   // Toggle edge animation
@@ -321,7 +396,7 @@ export default function ERCanvas() {
         )
       );
     },
-    [setEdges],
+    [],
   );
 
   // Change edge color
@@ -337,7 +412,7 @@ export default function ERCanvas() {
                 stroke: color,
               },
             };
-            
+
             // Update marker color if it exists
             if (edge.markerEnd && typeof edge.markerEnd === 'object' && 'type' in edge.markerEnd) {
               updatedEdge.markerEnd = {
@@ -345,14 +420,14 @@ export default function ERCanvas() {
                 color: color,
               };
             }
-            
+
             return updatedEdge;
           }
           return edge;
         })
       );
     },
-    [setEdges],
+    [],
   );
 
   // Delete edge
@@ -360,7 +435,43 @@ export default function ERCanvas() {
     (edgeId: string) => {
       setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
     },
-    [setEdges],
+    [],
+  );
+
+  // Change edge mode (normal, floating, simple-floating)
+  const handleChangeEdgeMode = useCallback(
+    (edgeId: string, newMode: string) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === edgeId) {
+            // If switching to normal mode, use the visual type as the actual type
+            if (newMode === 'normal') {
+              const visualType = edge.data?.type || 'smoothstep';
+              return {
+                ...edge,
+                type: visualType as string,
+                data: {
+                  ...edge.data,
+                  hasIndividualMode: true, // Mark this edge as having an individual override
+                },
+              };
+            }
+            // If switching to floating or simple-floating, keep visual type in data
+            return {
+              ...edge,
+              type: newMode as string,
+              data: {
+                ...edge.data,
+                type: edge.data?.type || edge.type || 'smoothstep',
+                hasIndividualMode: true, // Mark this edge as having an individual override
+              },
+            };
+          }
+          return edge;
+        })
+      );
+    },
+    [],
   );
 
   // Add new text node
@@ -536,6 +647,8 @@ export default function ERCanvas() {
         nodes={nodesWithHandlers}
         edges={styledEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        connectionLineComponent={edgeMode === 'normal' ? undefined : FloatingConnectionLine}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -549,9 +662,10 @@ export default function ERCanvas() {
         deleteKeyCode="Delete"
         connectionLineType={ConnectionLineType.SmoothStep}
         defaultEdgeOptions={{
-          type: defaultEdgeType,
+          type: edgeMode === 'normal' ? defaultEdgeType : edgeMode, // Use edge mode or default type for normal mode
           animated: defaultEdgeAnimated,
           style: { stroke: colors.edgeColor, strokeWidth: 2 },
+          data: { type: defaultEdgeType }, // Store visual edge type in data
         }}
         style={{ backgroundColor: colors.background }}
       >
@@ -594,6 +708,7 @@ export default function ERCanvas() {
             onToggleAnimation={handleToggleAnimation}
             onChangeColor={handleChangeEdgeColor}
             onDelete={handleDeleteEdge}
+            onChangeEdgeMode={handleChangeEdgeMode}
           />
         );
       })()}

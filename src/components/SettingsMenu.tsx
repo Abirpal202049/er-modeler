@@ -1,16 +1,29 @@
 import { useState } from 'react';
 import { Settings as SettingsIcon, X } from 'lucide-react';
-import { useSettings, type EdgeType } from '../contexts/SettingsContext';
+import { useSettings, type EdgeType, type EdgeMode } from '../contexts/SettingsContext';
 
 export default function SettingsMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const { defaultEdgeType, defaultEdgeAnimated, setDefaultEdgeType, setDefaultEdgeAnimated } = useSettings();
+  const {
+    defaultEdgeType,
+    defaultEdgeAnimated,
+    edgeMode,
+    setDefaultEdgeType,
+    setDefaultEdgeAnimated,
+    setEdgeMode
+  } = useSettings();
 
   const edgeTypes: { value: EdgeType; label: string }[] = [
     { value: 'default', label: 'Straight' },
     { value: 'smoothstep', label: 'Smooth Step' },
     { value: 'step', label: 'Step' },
     { value: 'bezier', label: 'Bezier' },
+  ];
+
+  const edgeModes: { value: EdgeMode; label: string; description: string }[] = [
+    { value: 'normal', label: 'Normal', description: 'Fixed handle positions' },
+    { value: 'simple-floating', label: 'Simple Floating', description: 'Edges stick to sides (top/right/bottom/left)' },
+    { value: 'floating', label: 'Floating', description: 'Fully dynamic edge positions' },
   ];
 
   return (
@@ -71,6 +84,41 @@ export default function SettingsMenu() {
 
             {/* Content */}
             <div className="p-4 space-y-6">
+              {/* Edge Mode */}
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: '#e0e0e0' }}
+                >
+                  Edge Mode
+                </label>
+                <div className="space-y-2">
+                  {edgeModes.map((mode) => (
+                    <button
+                      key={mode.value}
+                      onClick={() => setEdgeMode(mode.value)}
+                      className="w-full px-4 py-2.5 rounded-lg text-left text-sm transition-all duration-200"
+                      style={{
+                        backgroundColor: edgeMode === mode.value ? '#4a7ba7' : '#3a3a3a',
+                        color: '#ffffff',
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{mode.label}</div>
+                          <div className="text-xs mt-0.5" style={{ color: '#b0b0b0' }}>
+                            {mode.description}
+                          </div>
+                        </div>
+                        {edgeMode === mode.value && (
+                          <span className="text-sm">✓</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Default Edge Type */}
               <div>
                 <label 

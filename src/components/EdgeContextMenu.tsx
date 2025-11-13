@@ -9,30 +9,50 @@ interface EdgeContextMenuProps {
       stroke?: string;
       [key: string]: any;
     };
+    data?: {
+      type?: string; // Visual edge type stored in data
+      [key: string]: any;
+    };
   };
   onClose: () => void;
   onChangeType: (edgeId: string, type: string) => void;
   onToggleAnimation: (edgeId: string) => void;
   onChangeColor: (edgeId: string, color: string) => void;
   onDelete: (edgeId: string) => void;
+  onChangeEdgeMode: (edgeId: string, mode: string) => void;
 }
 
-export default function EdgeContextMenu({ 
-  id, 
-  top, 
-  left, 
+export default function EdgeContextMenu({
+  id,
+  top,
+  left,
   edge,
-  onClose, 
+  onClose,
   onChangeType,
   onToggleAnimation,
   onChangeColor,
   onDelete,
+  onChangeEdgeMode,
 }: EdgeContextMenuProps) {
+  // Get the visual edge type from edge.data.type (for floating edges)
+  const currentEdgeType = edge.data?.type || edge.type || 'smoothstep';
+
+  // Get the current edge mode (normal, floating, simple-floating)
+  const currentEdgeMode = edge.type === 'floating' ? 'floating'
+    : edge.type === 'simple-floating' ? 'simple-floating'
+    : 'normal';
+
   const edgeTypes = [
     { value: 'default', label: 'Straight' },
     { value: 'smoothstep', label: 'Smooth Step' },
     { value: 'step', label: 'Step' },
     { value: 'bezier', label: 'Bezier' },
+  ];
+
+  const edgeModes = [
+    { value: 'normal', label: 'Normal' },
+    { value: 'simple-floating', label: 'Simple Floating' },
+    { value: 'floating', label: 'Floating' },
   ];
 
   const edgeColors = [
@@ -45,6 +65,11 @@ export default function EdgeContextMenu({
 
   const handleTypeChange = (type: string) => {
     onChangeType(id, type);
+    onClose();
+  };
+
+  const handleEdgeModeChange = (mode: string) => {
+    onChangeEdgeMode(id, mode);
     onClose();
   };
 
@@ -104,19 +129,50 @@ export default function EdgeContextMenu({
               className="w-full px-3 py-1.5 text-left text-xs transition-all duration-100 flex items-center justify-between"
               style={{
                 color: '#e0e0e0',
-                backgroundColor: edge.type === type.value ? '#4a7ba7' : 'transparent',
+                backgroundColor: currentEdgeType === type.value ? '#4a7ba7' : 'transparent',
               }}
               onMouseEnter={(e) => {
-                if (edge.type !== type.value) {
+                if (currentEdgeType !== type.value) {
                   e.currentTarget.style.backgroundColor = '#3a3a3a';
                 }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = edge.type === type.value ? '#4a7ba7' : 'transparent';
+                e.currentTarget.style.backgroundColor = currentEdgeType === type.value ? '#4a7ba7' : 'transparent';
               }}
             >
               <span className="text-xs">{type.label}</span>
-              {edge.type === type.value && (
+              {currentEdgeType === type.value && (
+                <span className="text-xs ml-1.5" style={{ color: '#ffffff' }}>✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div className="h-px" style={{ backgroundColor: '#1a1a1a' }} />
+
+        {/* Edge Mode Options */}
+        <div className="py-0.5" style={{ backgroundColor: '#2a2a2a' }}>
+          {edgeModes.map((mode) => (
+            <button
+              key={mode.value}
+              onClick={() => handleEdgeModeChange(mode.value)}
+              className="w-full px-3 py-1.5 text-left text-xs transition-all duration-100 flex items-center justify-between"
+              style={{
+                color: '#e0e0e0',
+                backgroundColor: currentEdgeMode === mode.value ? '#4a7ba7' : 'transparent',
+              }}
+              onMouseEnter={(e) => {
+                if (currentEdgeMode !== mode.value) {
+                  e.currentTarget.style.backgroundColor = '#3a3a3a';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = currentEdgeMode === mode.value ? '#4a7ba7' : 'transparent';
+              }}
+            >
+              <span className="text-xs">{mode.label}</span>
+              {currentEdgeMode === mode.value && (
                 <span className="text-xs ml-1.5" style={{ color: '#ffffff' }}>✓</span>
               )}
             </button>
