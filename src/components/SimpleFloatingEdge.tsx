@@ -74,7 +74,7 @@ function SimpleFloatingEdge({
         targetX: tx,
         targetY: ty,
         targetPosition: targetPos,
-        borderRadius: data?.borderRadius ?? 8,
+        borderRadius: typeof data?.borderRadius === 'number' ? data.borderRadius : 8,
       });
       break;
   }

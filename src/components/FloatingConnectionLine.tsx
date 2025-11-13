@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import type { ConnectionLineComponentProps } from '@xyflow/react';
 import { getSmoothStepPath } from '@xyflow/react';
 import { getNodeCenter } from '../utils/floatingEdges';
@@ -9,21 +8,11 @@ function FloatingConnectionLine({
   fromPosition,
   fromNode,
 }: ConnectionLineComponentProps) {
-  const targetNode = useCallback(() => {
-    // Create a mock target node at the cursor position
-    return {
-      id: 'connection-target',
-      position: { x: toX, y: toY },
-      measured: { width: 1, height: 1 },
-    };
-  }, [toX, toY]);
-
   if (!fromNode) {
     return null;
   }
 
   const fromNodeCenter = getNodeCenter(fromNode);
-  const target = targetNode();
 
   const [edgePath] = getSmoothStepPath({
     sourceX: fromNodeCenter.x,
