@@ -4,6 +4,7 @@ import type { ProOptions } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useIndexedDB } from '../hooks/useIndexedDB';
+import { useFlowHistory } from '../hooks/useFlowHistory';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import ThemeToggle from './ThemeToggle';
@@ -14,6 +15,7 @@ import EdgeContextMenu from './EdgeContextMenu';
 import CanvasContextMenu from './CanvasContextMenu';
 import AddNodeMenu from './AddNodeMenu';
 import SettingsMenu from './SettingsMenu';
+import UndoRedoButtons from './UndoRedoButtons';
 import FloatingEdge from './FloatingEdge';
 import SimpleFloatingEdge from './SimpleFloatingEdge';
 import EditableEdge from './EditableEdge';
@@ -62,8 +64,8 @@ export default function ERCanvas() {
     });
   }, []);
 
-  const [storedNodes, setStoredNodes] = useLocalStorage<Node[]>('er-diagram-nodes', initialNodes);
-  const [nodes, setNodes] = useState<Node[]>(storedNodes);
+  const [storedNodesData, setStoredNodesData] = useLocalStorage<Node[]>('er-diagram-nodes', initialNodes);
+  const [storedEdgesData, setStoredEdgesData] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
 
   // Migrate existing edges based on edge mode
   const migrateEdges = useCallback((edges: Edge[]): Edge[] => {
@@ -105,8 +107,21 @@ export default function ERCanvas() {
     });
   }, [edgeMode]);
 
-  const [storedEdges, setStoredEdges] = useLocalStorage<Edge[]>('er-diagram-edges', initialEdges);
-  const [edges, setEdges] = useState<Edge[]>(() => migrateEdges(storedEdges));
+  // Initialize undo/redo with history
+  const {
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    takeSnapshot,
+    pauseHistory,
+    resumeHistory,
+  } = useFlowHistory(storedNodesData, migrateEdges(storedEdgesData));
+
   const [viewport, setViewport] = useLocalStorage<Viewport>('er-diagram-viewport', initialViewport);
 
   // Update edges when edge mode changes
@@ -116,8 +131,8 @@ export default function ERCanvas() {
 
   // Update localStorage with edges
   useEffect(() => {
-    setStoredEdges(edges);
-  }, [edges, setStoredEdges]);
+    setStoredEdgesData(edges);
+  }, [edges, setStoredEdgesData]);
   const [edgeContextMenu, setEdgeContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
@@ -158,10 +173,10 @@ export default function ERCanvas() {
   const updateNodes = useCallback((newNodes: Node[] | ((prev: Node[]) => Node[])) => {
     setNodes(prev => {
       const updated = typeof newNodes === 'function' ? newNodes(prev) : newNodes;
-      setStoredNodes(serializeNodes(updated));
+      setStoredNodesData(serializeNodes(updated));
       return updated;
     });
-  }, [serializeNodes, setStoredNodes]);
+  }, [serializeNodes, setStoredNodesData, setNodes]);
 
   // Auto-focus on newly added node
   const focusOnNode = useCallback((x: number, y: number) => {
@@ -181,7 +196,9 @@ export default function ERCanvas() {
           : node
       )
     );
-  }, [updateNodes]);
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [updateNodes, takeSnapshot]);
 
   // Handle ER entity name change
   const handleEntityNameChange = useCallback((nodeId: string, newName: string) => {
@@ -192,7 +209,9 @@ export default function ERCanvas() {
           : node
       )
     );
-  }, [updateNodes]);
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [updateNodes, takeSnapshot]);
 
   // Handle ER attributes change
   const handleAttributesChange = useCallback((nodeId: string, newAttributes: ERAttribute[]) => {
@@ -203,7 +222,9 @@ export default function ERCanvas() {
           : node
       )
     );
-  }, [updateNodes]);
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [updateNodes, takeSnapshot]);
 
   // Generate foreign key edges based on node attributes
   const foreignKeyEdges = useMemo(() => {
@@ -320,6 +341,16 @@ export default function ERCanvas() {
     [setViewport],
   );
 
+  // Handle node drag start - pause history to prevent creating snapshots during drag
+  const onNodeDragStart = useCallback(() => {
+    pauseHistory();
+  }, [pauseHistory]);
+
+  // Handle node drag stop - resume history and create snapshot of final position
+  const onNodeDragStop = useCallback(() => {
+    resumeHistory();
+  }, [resumeHistory]);
+
   // Handle node/edge deletion with Delete key
   const onNodesDelete = useCallback(
     async (deleted: Node[]) => {
@@ -388,8 +419,10 @@ export default function ERCanvas() {
             : edge
         )
       );
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     },
-    [],
+    [takeSnapshot],
   );
 
   // Toggle edge animation
@@ -402,8 +435,10 @@ export default function ERCanvas() {
             : edge
         )
       );
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     },
-    [],
+    [takeSnapshot],
   );
 
   // Change edge color
@@ -433,16 +468,20 @@ export default function ERCanvas() {
           return edge;
         })
       );
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     },
-    [],
+    [takeSnapshot],
   );
 
   // Delete edge
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
       setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     },
-    [],
+    [takeSnapshot],
   );
 
   // Change edge mode (normal, floating, simple-floating)
@@ -477,8 +516,10 @@ export default function ERCanvas() {
           return edge;
         })
       );
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     },
-    [],
+    [takeSnapshot],
   );
 
   // Handle edge label change
@@ -496,7 +537,9 @@ export default function ERCanvas() {
         return edge;
       })
     );
-  }, []);
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [takeSnapshot]);
 
   // Start editing edge label
   const handleStartEditingEdgeLabel = useCallback((edgeId: string) => {
@@ -528,7 +571,10 @@ export default function ERCanvas() {
 
     // Auto-focus on the new node
     focusOnNode(newNode.position.x + 100, newNode.position.y + 50);
-  }, [updateNodes, focusOnNode]);
+
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [updateNodes, focusOnNode, takeSnapshot]);
 
   // Add image node from file
   const handleAddImageNode = useCallback((file: File) => {
@@ -565,9 +611,12 @@ export default function ERCanvas() {
 
       // Auto-focus on the new image node
       focusOnNode(newNode.position.x + 150, newNode.position.y + 125);
+
+      // Discrete operation - create snapshot immediately
+      setTimeout(() => takeSnapshot(), 0);
     };
     reader.readAsDataURL(file);
-  }, [updateNodes, focusOnNode, saveImage]);
+  }, [updateNodes, focusOnNode, saveImage, takeSnapshot]);
 
   // Add new ER entity node
   const handleAddERNode = useCallback(() => {
@@ -591,7 +640,10 @@ export default function ERCanvas() {
 
     // Auto-focus on the new ER node
     focusOnNode(newNode.position.x + 140, newNode.position.y + 100);
-  }, [updateNodes, focusOnNode, colors.primary]);
+
+    // Discrete operation - create snapshot immediately
+    setTimeout(() => takeSnapshot(), 0);
+  }, [updateNodes, focusOnNode, colors.primary, takeSnapshot]);
 
   // Handle file input change
   const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -627,11 +679,22 @@ export default function ERCanvas() {
         event.preventDefault();
         fileInputRef.current?.click();
       }
+      // Cmd/Ctrl + Z: Undo
+      else if ((event.metaKey || event.ctrlKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      }
+      // Cmd/Ctrl + Shift + Z or Cmd/Ctrl + Y: Redo
+      else if (((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === 'z') ||
+               ((event.metaKey || event.ctrlKey) && event.key === 'y')) {
+        event.preventDefault();
+        redo();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleAddERNode, handleAddTextNode]);
+  }, [handleAddERNode, handleAddTextNode, undo, redo]);
 
   // Enhanced edges with selection styling and border radius
   const styledEdges = useMemo(() => {
@@ -699,6 +762,8 @@ export default function ERCanvas() {
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
         onEdgeContextMenu={onEdgeContextMenu}
         onEdgeDoubleClick={handleEdgeDoubleClick}
         onPaneContextMenu={onPaneContextMenu}
@@ -724,6 +789,12 @@ export default function ERCanvas() {
         onAddTextNode={handleAddTextNode}
         onAddImageNode={handleAddImageNode}
         onAddERNode={handleAddERNode}
+      />
+      <UndoRedoButtons
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       {/* Canvas Context Menu */}
