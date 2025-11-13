@@ -16,6 +16,7 @@ import AddNodeMenu from './AddNodeMenu';
 import SettingsMenu from './SettingsMenu';
 import FloatingEdge from './FloatingEdge';
 import SimpleFloatingEdge from './SimpleFloatingEdge';
+import EditableEdge from './EditableEdge';
 import FloatingConnectionLine from './FloatingConnectionLine';
 
 const proOptions: ProOptions = { account: "paid-pro", hideAttribution: true };
@@ -119,6 +120,7 @@ export default function ERCanvas() {
   }, [edges, setStoredEdges]);
   const [edgeContextMenu, setEdgeContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [canvasContextMenu, setCanvasContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   
   // Ref to store ReactFlow instance for auto-focus
   const reactFlowInstance = useRef<any>(null);
@@ -282,6 +284,11 @@ export default function ERCanvas() {
   const edgeTypes = useMemo(() => ({
     floating: FloatingEdge,
     'simple-floating': SimpleFloatingEdge,
+    smoothstep: EditableEdge,
+    bezier: EditableEdge,
+    straight: EditableEdge,
+    step: EditableEdge,
+    default: EditableEdge,
   }), []);
  
   const onNodesChange = useCallback(
@@ -474,19 +481,51 @@ export default function ERCanvas() {
     [],
   );
 
+  // Handle edge label change
+  const handleEdgeLabelChange = useCallback((edgeId: string, newLabel: string) => {
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.id === edgeId) {
+          // If label is empty, remove it; otherwise set it
+          if (!newLabel) {
+            const { label, ...rest } = edge as any;
+            return rest as Edge;
+          }
+          return { ...edge, label: newLabel };
+        }
+        return edge;
+      })
+    );
+  }, []);
+
+  // Start editing edge label
+  const handleStartEditingEdgeLabel = useCallback((edgeId: string) => {
+    setEditingEdgeId(edgeId);
+  }, []);
+
+  // Stop editing edge label
+  const handleStopEditingEdgeLabel = useCallback(() => {
+    setEditingEdgeId(null);
+  }, []);
+
+  // Handle edge double click
+  const handleEdgeDoubleClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setEditingEdgeId(edge.id);
+  }, []);
+
   // Add new text node
   const handleAddTextNode = useCallback(() => {
     const newNode: Node = {
       id: `node-${Date.now()}`,
       type: 'editableNode',
-      position: { 
+      position: {
         x: Math.random() * 400,
         y: Math.random() * 400,
       },
       data: { label: 'New Node' },
     };
     updateNodes((nds) => [...nds, newNode]);
-    
+
     // Auto-focus on the new node
     focusOnNode(newNode.position.x + 100, newNode.position.y + 50);
   }, [updateNodes, focusOnNode]);
@@ -616,7 +655,13 @@ export default function ERCanvas() {
           strokeWidth: edge.selected ? 3 : 2,
           opacity: edge.selected ? 0.85 : 1,
         },
-        data: edge.data || {},
+        data: {
+          ...(edge.data || {}),
+          isEditing: editingEdgeId === edge.id,
+          onLabelChange: handleEdgeLabelChange,
+          onStartEditing: handleStartEditingEdgeLabel,
+          onStopEditing: handleStopEditingEdgeLabel,
+        },
       };
 
       // For smoothstep edges, apply borderRadius as a direct property
@@ -631,7 +676,7 @@ export default function ERCanvas() {
 
       return baseEdge as Edge;
     });
-  }, [edges, foreignKeyEdges, colors]);
+  }, [edges, foreignKeyEdges, colors, editingEdgeId, handleEdgeLabelChange, handleStartEditingEdgeLabel, handleStopEditingEdgeLabel]);
 
   return (
     <div 
@@ -655,6 +700,7 @@ export default function ERCanvas() {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onEdgeContextMenu={onEdgeContextMenu}
+        onEdgeDoubleClick={handleEdgeDoubleClick}
         onPaneContextMenu={onPaneContextMenu}
         onViewportChange={onViewportChange}
         onInit={(instance) => { reactFlowInstance.current = instance; }}

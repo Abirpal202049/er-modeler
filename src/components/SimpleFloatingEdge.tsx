@@ -9,6 +9,7 @@ import {
   EdgeLabelRenderer,
 } from '@xyflow/react';
 import { getEdgeParams } from '../utils/simpleFloatingEdges';
+import EditableEdgeLabel from './EditableEdgeLabel';
 
 function SimpleFloatingEdge({
   id,
@@ -79,6 +80,14 @@ function SimpleFloatingEdge({
       break;
   }
 
+  const isEditing = data?.isEditing || false;
+  const onLabelChange = data?.onLabelChange;
+  const onStartEditing = data?.onStartEditing;
+  const onStopEditing = data?.onStopEditing;
+
+  // Show label component if there's a label or currently editing
+  const showLabel = (label || isEditing) && onLabelChange && onStartEditing && onStopEditing;
+
   return (
     <>
       <BaseEdge
@@ -88,30 +97,22 @@ function SimpleFloatingEdge({
         markerStart={markerStart}
         style={style}
       />
-      {label && (
+      {showLabel && (
         <EdgeLabelRenderer>
-          <div
-            style={{
-              position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
-              ...labelStyle,
-            }}
-            className="nodrag nopan"
-          >
-            {labelShowBg !== false && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: `-${labelBgPadding?.[0] ?? 2}px -${labelBgPadding?.[1] ?? 4}px`,
-                  borderRadius: labelBgBorderRadius ?? 2,
-                  zIndex: -1,
-                  ...labelBgStyle,
-                }}
-              />
-            )}
-            {label}
-          </div>
+          <EditableEdgeLabel
+            label={typeof label === 'string' ? label : undefined}
+            labelX={labelX}
+            labelY={labelY}
+            labelStyle={labelStyle}
+            labelShowBg={labelShowBg}
+            labelBgStyle={labelBgStyle}
+            labelBgPadding={labelBgPadding}
+            labelBgBorderRadius={labelBgBorderRadius}
+            onLabelChange={(newLabel) => onLabelChange(id, newLabel)}
+            onStartEditing={() => onStartEditing(id)}
+            onStopEditing={onStopEditing}
+            isEditing={isEditing}
+          />
         </EdgeLabelRenderer>
       )}
     </>

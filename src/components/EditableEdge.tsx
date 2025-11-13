@@ -1,20 +1,25 @@
-import { useCallback } from 'react';
 import type { EdgeProps } from '@xyflow/react';
 import {
-  useStore,
   getBezierPath,
   BaseEdge,
   getSmoothStepPath,
   getStraightPath,
+  getSimpleBezierPath,
   EdgeLabelRenderer,
 } from '@xyflow/react';
-import { getEdgeParams } from '../utils/floatingEdges';
 import EditableEdgeLabel from './EditableEdgeLabel';
 
-function FloatingEdge({
+/**
+ * Wrapper component for normal (non-floating) edges that adds editable label support
+ */
+function EditableEdge({
   id,
-  source,
-  target,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
   markerEnd,
   markerStart,
   style,
@@ -26,17 +31,7 @@ function FloatingEdge({
   labelBgPadding,
   labelBgBorderRadius,
 }: EdgeProps) {
-  const sourceNode = useStore(useCallback((store) => store.nodeLookup.get(source), [source]));
-  const targetNode = useStore(useCallback((store) => store.nodeLookup.get(target), [target]));
-
-  if (!sourceNode || !targetNode) {
-    return null;
-  }
-
-  const { sx, sy, tx, ty, sourcePos, targetPos } = getEdgeParams(sourceNode, targetNode);
-
-  // Determine which path function to use based on edge type
-  // Default to smoothstep if no type specified
+  // Determine which path function to use based on edge data type
   const edgeType = data?.type || 'smoothstep';
 
   let edgePath: string;
@@ -46,35 +41,45 @@ function FloatingEdge({
   switch (edgeType) {
     case 'bezier':
       [edgePath, labelX, labelY] = getBezierPath({
-        sourceX: sx,
-        sourceY: sy,
-        sourcePosition: sourcePos,
-        targetX: tx,
-        targetY: ty,
-        targetPosition: targetPos,
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
       });
       break;
 
     case 'straight':
     case 'default':
       [edgePath, labelX, labelY] = getStraightPath({
-        sourceX: sx,
-        sourceY: sy,
-        targetX: tx,
-        targetY: ty,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
       });
       break;
 
     case 'step':
+      [edgePath, labelX, labelY] = getSimpleBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      });
+      break;
+
     case 'smoothstep':
     default:
       [edgePath, labelX, labelY] = getSmoothStepPath({
-        sourceX: sx,
-        sourceY: sy,
-        sourcePosition: sourcePos,
-        targetX: tx,
-        targetY: ty,
-        targetPosition: targetPos,
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
         borderRadius: typeof data?.borderRadius === 'number' ? data.borderRadius : 8,
       });
       break;
@@ -119,4 +124,4 @@ function FloatingEdge({
   );
 }
 
-export default FloatingEdge;
+export default EditableEdge;
